@@ -1,5 +1,5 @@
 import { getPerformanceTimeDelta } from '../../utils/getPerformanceTimeDelta'
-import { log } from '../../utils/logger'
+import { LogLevel, log } from '../../utils/logger'
 import { validateDomain } from '../../utils/validateDomain'
 import type { DNSEnumerationResult } from '../Types'
 
@@ -24,10 +24,20 @@ export const getSecurityTrailsResults = async (
       },
     }
   )
-    .then(
-      (result) =>
-        result.json() as Promise<{ subdomains: string[]; endpoint: string }>
-    )
+    .then(async (result) => {
+      if (result.status < 200 || result.status >= 300) {
+        log(
+          `HTTP response [${result.status} ${result.statusText}] ` +
+            (await result.text())
+        )
+        throw new Error('Failed to process SecurityTrails API result')
+      }
+
+      return result.json() as Promise<{
+        subdomains: string[]
+        endpoint: string
+      }>
+    })
     .then((result) => {
       const timeAtEnd = performance.now()
       log(
@@ -37,6 +47,15 @@ export const getSecurityTrailsResults = async (
         )}`
       )
       return result.subdomains.map((subdomain) => `${subdomain}.${domain}`)
+    })
+    .catch((reason) => {
+      log(
+        `Failed to process SecurityTrails response for [${domain}], reason:` +
+          reason.toString(),
+        LogLevel.Error
+      )
+
+      throw reason
     })
 
   return {
